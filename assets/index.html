@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to 3D Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        .preview {
+            margin-top: 20px;
+        }
+        video {
+            max-width: 100%;
+        }
+        #status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image to 3D Converter</h1>
+    
+    <div class="input-group">
+        <label for="imageUrl">Image URL:</label><br>
+        <input type="text" id="imageUrl" style="width: 80%;" 
+               placeholder="https://example.com/image.jpg">
+        <button onclick="convert()">Convert</button>
+    </div>
+
+    <div id="status"></div>
+
+    <div class="preview" id="preview" style="display: none;">
+        <h2>Preview</h2>
+        <video id="previewVideo" controls></video>
+    </div>
+
+    <div class="preview" id="model" style="display: none;">
+        <h2>3D Model</h2>
+        <a id="modelDownload" href="#" target="_blank">Download GLB</a>
+    </div>
+
+    <script>
+        let taskId = null;
+        let checkInterval = null;
+
+        async function convert() {
+            const imageUrl = document.getElementById('imageUrl').value;
+            if (!imageUrl) {
+                showStatus('Please enter an image URL', 'error');
+                return;
+            }
+
+            try {
+                // Create task
+                const response = await fetch('/api/v1/image-to-3d', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        image_url: imageUrl,
+                        segm_mode: 'auto'
+                    }),
+                });
+
+                const data = await response.json();
+                taskId = data.id;
+                showStatus('Processing...', 'success');
+                
+                // Start checking status
+                if (checkInterval) clearInterval(checkInterval);
+                checkInterval = setInterval(checkStatus, 2000);
+            } catch (error) {
+                showStatus('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function checkStatus() {
+            if (!taskId) return;
+
+            try {
+                const response = await fetch(`/api/v1/image-to-3d/${taskId}`);
+                const data = await response.json();
+
+                switch (data.status) {
+                    case 'processing':
+                        showStatus('Processing...', 'success');
+                        break;
+                    case 'preview':
+                        showStatus('Preview ready!', 'success');
+                        showPreview(data.preview);
+                        break;
+                    case 'success':
+                        showStatus('Conversion complete!', 'success');
+                        showPreview(data.preview);
+                        showModel(data.models.glb);
+                        clearInterval(checkInterval);
+                        break;
+                    case 'failed':
+                        showStatus('Error: ' + data.error.message, 'error');
+                        clearInterval(checkInterval);
+                        break;
+                }
+            } catch (error) {
+                showStatus('Error checking status: ' + error.message, 'error');
+                clearInterval(checkInterval);
+            }
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = type;
+        }
+
+        function showPreview(url) {
+            const preview = document.getElementById('preview');
+            const video = document.getElementById('previewVideo');
+            preview.style.display = 'block';
+            video.src = url;
+        }
+
+        function showModel(url) {
+            const model = document.getElementById('model');
+            const download = document.getElementById('modelDownload');
+            model.style.display = 'block';
+            download.href = url;
+        }
+    </script>
+</body>
+</html> 
