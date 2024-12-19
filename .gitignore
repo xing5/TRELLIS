@@ -396,3 +396,9 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+assets/example_image/*
+assets/models*
+assets/previews*
+sample*
+test.py

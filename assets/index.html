@@ -3,65 +3,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Image to 3D Converter</title>
+    <title>TRELLIS Image-to-3D Playground</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 720px;
+            margin: 40px auto;
+            padding: 0 20px;
+            color: #333;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 500;
+            margin-bottom: 24px;
+            color: #111;
         }
         .input-group {
-            margin-bottom: 20px;
+            margin-bottom: 32px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        button {
+            background: #000;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        .status {
+            font-size: 13px;
+            color: #666;
+            margin: 16px 0;
         }
         .preview {
-            margin-top: 20px;
+            margin-top: 32px;
+        }
+        .preview h2 {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            color: #111;
         }
         video {
-            max-width: 100%;
-        }
-        #status {
-            margin-top: 10px;
-            padding: 10px;
+            width: 100%;
             border-radius: 4px;
+            background: #f5f5f5;
+        }
+        .download-link {
+            display: inline-block;
+            margin-top: 8px;
+            color: #000;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        .download-link:hover {
+            text-decoration: underline;
         }
         .error {
-            background-color: #ffebee;
-            color: #c62828;
-        }
-        .success {
-            background-color: #e8f5e9;
-            color: #2e7d32;
+            color: #dc2626;
+            font-size: 13px;
         }
     </style>
 </head>
 <body>
-    <h1>Image to 3D Converter</h1>
+    <h1>Image-to-3D Converter</h1>
     
     <div class="input-group">
-        <label for="imageUrl">Image URL:</label><br>
-        <input type="text" id="imageUrl" style="width: 80%;" 
-               placeholder="https://example.com/image.jpg">
-        <button onclick="convert()">Convert</button>
+        <input type="text" id="imageUrl" 
+               placeholder="Enter image URL (e.g., https://example.com/image.jpg)">
+        <button onclick="generate()">Generate 3D Model</button>
     </div>
 
-    <div id="status"></div>
+    <div id="status" class="status"></div>
 
     <div class="preview" id="preview" style="display: none;">
         <h2>Preview</h2>
-        <video id="previewVideo" controls></video>
+        <video id="previewVideo" controls playsinline></video>
     </div>
 
     <div class="preview" id="model" style="display: none;">
-        <h2>3D Model</h2>
-        <a id="modelDownload" href="#" target="_blank">Download GLB</a>
+        <a id="modelDownload" class="download-link" href="#" target="_blank">
+            ↓ Download 3D Model (GLB)
+        </a>
     </div>
 
     <script>
-        let taskId = null;
+        let generationId = null;
         let checkInterval = null;
 
-        async function convert() {
+        async function generate() {
             const imageUrl = document.getElementById('imageUrl').value;
             if (!imageUrl) {
                 showStatus('Please enter an image URL', 'error');
@@ -69,66 +113,60 @@
             }
 
             try {
-                // Create task
-                const response = await fetch('/api/v1/image-to-3d', {
+                showStatus('Starting generation...');
+                const response = await fetch('/api/v1/generations/image-to-3d', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        image_url: imageUrl,
-                        segm_mode: 'auto'
-                    }),
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_url: imageUrl })
                 });
 
                 const data = await response.json();
-                taskId = data.id;
-                showStatus('Processing...', 'success');
+                generationId = data.id;
                 
-                // Start checking status
                 if (checkInterval) clearInterval(checkInterval);
-                checkInterval = setInterval(checkStatus, 2000);
+                checkInterval = setInterval(checkProgress, 1000);
             } catch (error) {
-                showStatus('Error: ' + error.message, 'error');
+                showStatus(error.message, 'error');
             }
         }
 
-        async function checkStatus() {
-            if (!taskId) return;
+        async function checkProgress() {
+            if (!generationId) return;
 
             try {
-                const response = await fetch(`/api/v1/image-to-3d/${taskId}`);
+                const response = await fetch(`/api/v1/generations/${generationId}`);
                 const data = await response.json();
 
                 switch (data.status) {
+                    case 'waiting':
                     case 'processing':
-                        showStatus('Processing...', 'success');
+                        showStatus('Processing your image...');
                         break;
                     case 'preview':
-                        showStatus('Preview ready!', 'success');
+                        showStatus('Generating 3D model...');
                         showPreview(data.preview);
                         break;
                     case 'success':
-                        showStatus('Conversion complete!', 'success');
+                        showStatus('Generation complete!');
                         showPreview(data.preview);
-                        showModel(data.models.glb);
+                        showModel(data.output.model_url);
                         clearInterval(checkInterval);
                         break;
                     case 'failed':
-                        showStatus('Error: ' + data.error.message, 'error');
+                        showStatus(data.error?.message || 'Generation failed', 'error');
                         clearInterval(checkInterval);
                         break;
                 }
             } catch (error) {
-                showStatus('Error checking status: ' + error.message, 'error');
+                showStatus('Error checking status', 'error');
                 clearInterval(checkInterval);
             }
         }
 
-        function showStatus(message, type) {
+        function showStatus(message, type = '') {
             const status = document.getElementById('status');
             status.textContent = message;
-            status.className = type;
+            status.className = type === 'error' ? 'status error' : 'status';
         }
 
         function showPreview(url) {
